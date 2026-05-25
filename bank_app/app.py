@@ -66,7 +66,14 @@ def deposit():
     if cus_account is None:
         print(f"Account {account_number} not found.")
         return
-    cus_account.balance += amount
+    if cus_account.balance + cus_account.account_limit >= amount:
+        cus_account.balance += (
+            amount# Add the deposited amount to the customer's account balance
+        )
+    default_account = find_account(DEFAULT_BANK_ACCOUNT_NUMBER)
+    default_account.balance -= (
+        amount  # Subtract the deposited amount from the default bank account
+    )
     record_transaction(
         DEFAULT_BANK_ACCOUNT_NUMBER, account_number, amount
     )  # Record the deposit transaction
@@ -84,7 +91,8 @@ def withdraw():
         print(f"Account {account_number} not found.")
         return
     if cus_account.balance + cus_account.overdraft_limit >= amount:
-        cus_account.balance -= amount
+        cus_account.balance -= (amount
+        )  # Subtract the withdrawn amount from the customer's account balance
         default_account.balance += (
             amount  # Add the withdrawn amount to the default bank account
         )
