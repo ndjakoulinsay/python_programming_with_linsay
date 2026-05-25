@@ -50,6 +50,11 @@ def list_accounts():
 
 def create_account():
     account_number = input("Enter account number: ")
+
+    if find_account(account_number) is not None:
+        print(f"Account {account_number} already exists.")
+        return
+
     holder_name = input("Enter account holder name: ")
     account_limit = int(input("Enter account limit: "))
     overdraft_limit = int(input("Enter overdraft limit: "))
@@ -58,19 +63,31 @@ def create_account():
     )
     accounts.append(new_account)
 
+    print(f"Account created successfully: {new_account}")
+
 
 def deposit():
     account_number = input("Enter account number: ")
     amount = int(input("Enter amount to deposit: "))
     cus_account = find_account(account_number)
+    default_account = find_account(DEFAULT_BANK_ACCOUNT_NUMBER)
     if cus_account is None:
         print(f"Account {account_number} not found.")
         return
-    if cus_account.balance + cus_account.account_limit >= amount:
-        cus_account.balance += (
-            amount# Add the deposited amount to the customer's account balance
+    elif amount > default_account.balance:
+        print(
+            f"Insufficient funds in the default bank account for this deposit. Available balance: {default_account.balance}"
         )
-    default_account = find_account(DEFAULT_BANK_ACCOUNT_NUMBER)
+        return
+    elif cus_account.balance + amount > cus_account.account_limit:
+        print(
+            f"Deposit amount exceeds the account limit for account {account_number}. Available balance: {cus_account.balance}, Account limit: {cus_account.account_limit}"
+        )
+        return
+
+    cus_account.balance += (
+        amount  # Add the deposited amount to the customer's account balance
+    )
     default_account.balance -= (
         amount  # Subtract the deposited amount from the default bank account
     )
@@ -87,24 +104,38 @@ def withdraw():
     amount = int(input("Enter amount to withdraw: "))
     cus_account = find_account(account_number)
     default_account = find_account(DEFAULT_BANK_ACCOUNT_NUMBER)
+    overdraft_used = False
     if cus_account is None:
         print(f"Account {account_number} not found.")
         return
-    if cus_account.balance + cus_account.overdraft_limit >= amount:
-        cus_account.balance -= (amount
-        )  # Subtract the withdrawn amount from the customer's account balance
-        default_account.balance += (
-            amount  # Add the withdrawn amount to the default bank account
-        )
-        record_transaction(
-            account_number, DEFAULT_BANK_ACCOUNT_NUMBER, amount
-        )  # Record the withdrawal transaction
+    elif cus_account.balance < amount:
+        if cus_account.overdraft_limit == 0:
+            print(
+                f"Insufficient funds for withdrawal from account {account_number}. Available balance: {cus_account.balance}"
+            )
+            return
+        elif cus_account.balance + cus_account.overdraft_limit < amount:
+            print(
+                f"Insufficient funds for withdrawal from account {account_number}. Available balance and overdraft limit: {cus_account.balance + cus_account.overdraft_limit}"
+            )
+            return
+        overdraft_used = True
+
+    cus_account.balance -= (
+        amount  # Subtract the withdrawn amount from the customer's account balance
+    )
+    default_account.balance += (
+        amount  # Add the withdrawn amount to the default bank account
+    )
+    record_transaction(
+        account_number, DEFAULT_BANK_ACCOUNT_NUMBER, amount
+    )  # Record the withdrawal transaction
+    print(
+        f"Withdrew {amount} from account {account_number}. New balance: {cus_account.balance}"
+    )
+    if overdraft_used:
         print(
-            f"Withdrew {amount} from account {account_number}. New balance: {cus_account.balance}"
-        )
-    else:
-        print(
-            f"Insufficient funds for withdrawal from account {account_number}. Available balance and overdraft limit: {cus_account.balance + cus_account.overdraft_limit}"
+            f"Note: Overdraft used for this withdrawal. Available balance: {cus_account.balance}, Overdraft limit: {cus_account.overdraft_limit}"
         )
 
 
@@ -114,7 +145,7 @@ def check_balance():
     if account is None:
         print(f"Account {account_number} not found.")
     else:
-        print(f"Account {account_number} balance: {account.balance}")
+        print(f"Account {account_number} - {account.holder} balance: {account.balance}")
 
 
 def transfer():
@@ -122,35 +153,54 @@ def transfer():
     to_account_number = input("Enter destination account number: ")
     amount = int(input("Enter amount to transfer: "))
 
-    from_account = None
-    to_account = None
-
-    for account in accounts:
-        if account.acc_number == from_account_number:
-            from_account = account
-        if account.acc_number == to_account_number:
-            to_account = account
+    from_account = find_account(from_account_number)
+    to_account = find_account(to_account_number)
 
     if from_account is None:
         print(f"Source account {from_account_number} not found.")
         return
-    if to_account is None:
+    elif to_account is None:
         print(f"Destination account {to_account_number} not found.")
         return
+    elif from_account_number == to_account_number:
+        print("Source and destination accounts cannot be the same.")
+        return
+    elif from_account_number == DEFAULT_BANK_ACCOUNT_NUMBER:
+        print(
+            f"Cannot transfer from the default bank account. Please use the deposit function to add funds to customer accounts."
+        )
+        return
+    elif to_account_number == DEFAULT_BANK_ACCOUNT_NUMBER:
+        print(
+            f"Cannot transfer to the default bank account. Please use the withdraw function to remove funds from customer accounts."
+        )
+        return
+    if from_account.balance < amount:
+        if from_account.overdraft_limit == 0:
+            print(
+                f"Insufficient funds for transfer from account {from_account_number}. Available balance: {from_account.balance}"
+            )
+            return
+        elif from_account.balance + from_account.overdraft_limit < amount:
+            print(
+                f"Insufficient funds for transfer from account {from_account_number}. Available balance and overdraft limit: {from_account.balance + from_account.overdraft_limit}"
+            )
+            return
 
-    if from_account.balance + from_account.overdraft_limit >= amount:
-        from_account.balance -= amount
-        to_account.balance += amount
-        record_transaction(
-            from_account_number, to_account_number, amount
-        )  # Record the transfer transaction
+    if (to_account.balance + amount) > to_account.account_limit:
         print(
-            f"Transferred {amount} from account {from_account_number} to account {to_account_number}. New balance of source account: {from_account.balance}, New balance of destination account: {to_account.balance}"
+            f"Transfer amount exceeds the account limit for destination account {to_account_number}. Available balance: {to_account.balance}, Account limit: {to_account.account_limit}"
         )
-    else:
-        print(
-            f"Insufficient funds for transfer from account {from_account_number}. Available balance and overdraft limit: {from_account.balance + from_account.overdraft_limit}"
-        )
+        return
+
+    from_account.balance -= amount
+    to_account.balance += amount
+    record_transaction(
+        from_account_number, to_account_number, amount
+    )  # Record the transfer transaction
+    print(
+        f"Transferred {amount} from account {from_account_number} to account {to_account_number}. New balance of source account: {from_account.balance}, New balance of destination account: {to_account.balance}"
+    )
 
 
 def list_all_transactions():
@@ -176,10 +226,10 @@ def display_menu():
     print("2. Deposit")
     print("3. Withdraw")
     print("4. Check Balance")
-    print("5. transfer")
-    print("6. list accounts")
-    print("7. list all transactions")
-    print("8. list transactions for an account")
+    print("5. Transfer")
+    print("6. List Accounts")
+    print("7. List All Transactions")
+    print("8. List Transactions for an Account")
     print("9. Exit")
 
 
