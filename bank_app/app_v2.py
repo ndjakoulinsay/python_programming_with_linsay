@@ -12,6 +12,26 @@ class Account:
         self.balance = balance
         self.account_limit = account_limit
         self.overdraft_limit = overdraft_limit
+        
+    def debit(self, amount):
+        if self.balance >= amount:
+            self.balance -= amount
+            return True, False  # Indicate that overdraft was not used
+        elif self.overdraft_limit > 0 and (self.balance + self.overdraft_limit) >= amount:
+            self.balance -= amount
+            return True, True  # Indicate that overdraft was used
+        else:
+            return False, False  # Indicate that debit failed and overdraft was not used
+        
+    def credit(self, amount):
+        if self.balance + amount > self.account_limit:
+            return False
+        else:
+            self.balance += amount
+            return True
+        
+    def print_balance(self):
+        print(f"Account {self.acc_number} - {self.holder} balance: {self.balance}")
 
     def __str__(self):
         return f"Holder: {self.holder} | Account Number: {self.acc_number} | Balance: {self.balance} | Account Limit: {self.account_limit} | Overdraft Limit: {self.overdraft_limit}"
@@ -74,23 +94,18 @@ def deposit():
     if cus_account is None:
         print(f"Account {account_number} not found.")
         return
-    elif amount > default_account.balance:
+    elif default_account.debit(amount) is False:
         print(
             f"Insufficient funds in the default bank account for this deposit. Available balance: {default_account.balance}"
         )
         return
-    elif cus_account.balance + amount > cus_account.account_limit:
+    elif cus_account.credit(amount) is False:
         print(
             f"Deposit amount exceeds the account limit for account {account_number}. Available balance: {cus_account.balance}, Account limit: {cus_account.account_limit}"
         )
+        default_account.credit(amount)  # Revert the debit from the default account since the credit to the customer's account failed
         return
 
-    cus_account.balance += (
-        amount  # Add the deposited amount to the customer's account balance
-    )
-    default_account.balance -= (
-        amount  # Subtract the deposited amount from the default bank account
-    )
     record_transaction(
         DEFAULT_BANK_ACCOUNT_NUMBER, account_number, amount
     )  # Record the deposit transaction
@@ -104,29 +119,26 @@ def withdraw():
     amount = int(input("Enter amount to withdraw: "))
     cus_account = find_account(account_number)
     default_account = find_account(DEFAULT_BANK_ACCOUNT_NUMBER)
-    overdraft_used = False
+    
     if cus_account is None:
         print(f"Account {account_number} not found.")
         return
-    elif cus_account.balance < amount:
+    
+    success, overdraft_used = cus_account.debit(amount)
+    
+    if not success:
         if cus_account.overdraft_limit == 0:
             print(
                 f"Insufficient funds for withdrawal from account {account_number}. Available balance: {cus_account.balance}"
             )
             return
-        elif cus_account.balance + cus_account.overdraft_limit < amount:
+        else:
             print(
                 f"Insufficient funds for withdrawal from account {account_number}. Available balance and overdraft limit: {cus_account.balance + cus_account.overdraft_limit}"
             )
             return
-        overdraft_used = True
 
-    cus_account.balance -= (
-        amount  # Subtract the withdrawn amount from the customer's account balance
-    )
-    default_account.balance += (
-        amount  # Add the withdrawn amount to the default bank account
-    )
+    default_account.credit(amount)  # Add the withdrawn amount back to the default bank account
     record_transaction(
         account_number, DEFAULT_BANK_ACCOUNT_NUMBER, amount
     )  # Record the withdrawal transaction
@@ -145,7 +157,7 @@ def check_balance():
     if account is None:
         print(f"Account {account_number} not found.")
     else:
-        print(f"Account {account_number} - {account.holder} balance: {account.balance}")
+        account.print_balance()
 
 
 def transfer():
@@ -175,32 +187,38 @@ def transfer():
             f"Cannot transfer to the default bank account. Please use the withdraw function to remove funds from customer accounts."
         )
         return
-    if from_account.balance < amount:
+    
+    from_success, from_overdraft_used = from_account.debit(amount)
+    if not from_success:
         if from_account.overdraft_limit == 0:
             print(
                 f"Insufficient funds for transfer from account {from_account_number}. Available balance: {from_account.balance}"
             )
             return
-        elif from_account.balance + from_account.overdraft_limit < amount:
+        else:
             print(
                 f"Insufficient funds for transfer from account {from_account_number}. Available balance and overdraft limit: {from_account.balance + from_account.overdraft_limit}"
             )
             return
 
-    if (to_account.balance + amount) > to_account.account_limit:
+    if to_account.credit(amount) is False:
         print(
             f"Transfer amount exceeds the account limit for destination account {to_account_number}. Available balance: {to_account.balance}, Account limit: {to_account.account_limit}"
         )
+        from_account.credit(amount)  # Revert the debit from the source account since the credit to the destination account failed
         return
 
-    from_account.balance -= amount
-    to_account.balance += amount
     record_transaction(
         from_account_number, to_account_number, amount
     )  # Record the transfer transaction
     print(
         f"Transferred {amount} from account {from_account_number} to account {to_account_number}. New balance of source account: {from_account.balance}, New balance of destination account: {to_account.balance}"
     )
+    
+    if from_overdraft_used:
+        print(
+            f"Note: Overdraft used for this transfer. Available balance of source account: {from_account.balance}, Overdraft limit: {from_account.overdraft_limit}"
+        )
 
 
 def list_all_transactions():
